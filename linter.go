@@ -16,7 +16,7 @@ type linterError struct {
 
 var reFileCol = regexp.MustCompile(`^([0-9A-Za-z_/.]+):(\d+)(?::\d+)?: (.*)$`) //TODO: doesn't work with paths containing spaces
 
-func parseLinterOut(in string, da *diffAlignment, left bool) []linterError {
+func parseLinterOut(in string) []linterError {
 	lines := strings.Split(in, "\n")
 	count := 0
 	r := make([]linterError, 0, len(lines))
@@ -28,27 +28,9 @@ func parseLinterOut(in string, da *diffAlignment, left bool) []linterError {
 
 		count++
 
-		path := repoAbsPath(m[1])
+		path := m[1]
 		lineno, _ := strconv.Atoi(m[2])
 		remark := m[3]
-
-		if left {
-			op := path
-			path = da.leftToRightPath[path]
-			if path == "" {
-				if debug {
-					fmt.Printf("REJECTED %s (NO CONVERSION)\n", op)
-				}
-				continue
-			}
-		}
-
-		if da.knownRightLines[path] == nil {
-			// Not a file touched by the diff
-			continue
-		}
-
-		fmt.Printf("accepted %s:%d\n", path, lineno)
 
 		r = append(r, linterError{path, lineno, remark})
 	}

@@ -1,26 +1,17 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-
-	"github.com/google/go-github/github"
 )
 
 const (
-	TMPPATH = "/tmp"
-	REPO    = "https://github.com/go-delve/delve"
-	//EXAMPLE_PULL_REQUEST = 2097
-	EXAMPLE_PULL_REQUEST = 2011
-	debug                = true
+	debug = true
 )
 
-var LINTER_COMMAND = []string{"golangci-lint", "run", "--max-issues-per-linter", "0", "--max-same-issues", "0", "--print-issued-lines", "false", "--uniq-by-line", "false", "--timeout", "10m"}
-var repodir string
+var LinterCommand = []string{"staticcheck", "-checks", "all,-ST1003"}
 
 func must(err error) {
 	if err != nil {
@@ -53,52 +44,21 @@ func execInNoErr(dir string, cmdstr string, args ...string) string {
 }
 
 func main() {
-	repodir = filepath.Join(TMPPATH, filepath.Base(REPO))
-	reponame := filepath.Base(REPO)
-	repowner := strings.Split(REPO, "/")[3]
+	firstCommit := "HEAD^"
+	secondCommit := "HEAD"
 
-	if _, err := os.Stat(repodir); os.IsNotExist(err) {
-		if debug {
-			fmt.Printf("cloning\n")
-		}
-		execIn(TMPPATH, "git", "clone", REPO+".git")
-	} else {
-		if debug {
-			fmt.Printf("updating\n")
-		}
-		execIn(repodir, "git", "checkout", "master")
-		//execIn(repodir, "git", "pull", "origin")
-	}
-
-	client := github.NewClient(nil)
-	pr, _, err := client.PullRequests.Get(context.Background(), repowner, reponame, EXAMPLE_PULL_REQUEST)
-	must(err)
-
-	headlabel := strings.Split(*pr.Head.Label, ":")
-	pruser := headlabel[0]
-	prbranch := headlabel[1]
-
-	if debug {
-		fmt.Printf("fetching %q %q\n", pruser, prbranch)
-	}
-	execIn(repodir, "git", "fetch", fmt.Sprintf("https://github.com/%s/%s.git", pruser, reponame), prbranch)
-	mergeBase := strings.TrimSpace(execIn(repodir, "git", "merge-base", "FETCH_HEAD", "master"))
-
-	if debug {
-		fmt.Printf("merge base is %q\n", mergeBase)
-	}
-
-	da, err := parseDiff(execIn(repodir, "git", "diff", "--no-color", mergeBase, "FETCH_HEAD"))
+	da, err := parseDiff(execIn(".", "git", "diff", "--no-color", firstCommit, secondCommit))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
 
-	execIn(repodir, "git", "checkout", mergeBase)
-	linterOutMergeBaseStr := execInNoErr(repodir, LINTER_COMMAND[0], LINTER_COMMAND[1:]...)
-	linterOutMergeBase := parseLinterOut(linterOutMergeBaseStr, da, true)
+	LinterCommand = append(LinterCommand, strings.TrimSpace(execIn(".", "go", "list", "-m"))+"/...")
+
+	execIn(".", "git", "checkout", firstCommit)
+	linterOutFirst := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
 
 	if debug {
-		fmt.Printf("Merge base has %d linter lines in files touched by diff\n", len(linterOutMergeBase))
+		fmt.Printf("Merge base has %d linter lines in files touched by diff\n", len(linterOutFirst))
 	}
 
 	/*execIn(repodir, "git", "checkout", "FETCH_HEAD")
@@ -111,19 +71,10 @@ func main() {
 		}
 	}*/
 
+	_ = da
+
 	//TODO:
 	// - parse diff and align source
 	// - parse linter output and align
 
-}
-
-func repoAbsPath(p string) string {
-	if p == "" {
-		return ""
-	}
-	if p[0] == '/' {
-		//TODO: doesn't work on windows
-		return p
-	}
-	return filepath.Join(repodir, p)
 }

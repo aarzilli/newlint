@@ -43,11 +43,20 @@ func execInNoErr(dir string, cmdstr string, args ...string) string {
 	return string(out)
 }
 
+//TODO: change to taking three files:
+// 	- first output
+// 	- second output
+// 	- git diff
+//TODO: check that this works locally
+//TODO: publish, CHANGE NAME!!!
+//TODO: make a change to test_mac.sh and check that it works remotely (git stash; check; git stash pop)
+
 func main() {
 	firstCommit := "master"
-	secondCommit := execIn(".", "git", "rev-parse", "HEAD")
+	
+	linterOutSecond := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
 
-	da, err := parseDiff(execIn(".", "git", "diff", "--no-color", firstCommit, secondCommit))
+	da, err := parseDiff(execIn(".", "git", "diff", "--no-color", firstCommit, execIn(".", "git", "rev-parse", "HEAD")))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 	}
@@ -60,16 +69,15 @@ func main() {
 	if debug {
 		fmt.Printf("Merge base has %d linter lines in files touched by diff\n", len(linterOutFirst))
 	}
-
+	
 	mapToRight(linterOutFirst, da)
+	
+	execIn(".", "git", "checkout", "@{-1}")
 
 	linterOutFirstMap := make(map[pos]bool)
 	for i := range linterOutFirst {
 		linterOutFirstMap[linterOutFirst[i].pos] = true
 	}
-
-	execIn(".", "git", "checkout", secondCommit)
-	linterOutSecond := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
 
 	bad := false
 	for i := range linterOutSecond {

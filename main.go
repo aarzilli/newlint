@@ -44,8 +44,8 @@ func execInNoErr(dir string, cmdstr string, args ...string) string {
 }
 
 func main() {
-	firstCommit := "HEAD^"
-	secondCommit := "HEAD"
+	firstCommit := "master"
+	secondCommit := execIn(".", "git", "rev-parse", "HEAD")
 
 	da, err := parseDiff(execIn(".", "git", "diff", "--no-color", firstCommit, secondCommit))
 	if err != nil {
@@ -61,20 +61,49 @@ func main() {
 		fmt.Printf("Merge base has %d linter lines in files touched by diff\n", len(linterOutFirst))
 	}
 
-	/*execIn(repodir, "git", "checkout", "FETCH_HEAD")
-	linterOutFetchHeadStr := execInNoErr(repodir, LINTER_COMMAND[0], LINTER_COMMAND[1:]...)
-	linterOutFetchHead := parseLinterOut(linterOutFetchHeadStr, da, false)
-	if debug {
-		fmt.Printf("FETCH_HEAD has %d linter lines in files touched by diff\n", len(linterOutFetchHead))
-		for _, e := range linterOutFetchHead {
-			fmt.Printf("%s:%d: %s\n", e.path, e.lineno, e.remark)
+	mapToRight(linterOutFirst, da)
+
+	linterOutFirstMap := make(map[pos]bool)
+	for i := range linterOutFirst {
+		linterOutFirstMap[linterOutFirst[i].pos] = true
+	}
+
+	execIn(".", "git", "checkout", secondCommit)
+	linterOutSecond := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
+
+	bad := false
+	for i := range linterOutSecond {
+		if !linterOutFirstMap[linterOutSecond[i].pos] {
+			fmt.Printf("%s:%d:%s\n", linterOutSecond[i].path, linterOutSecond[i].lineno, linterOutSecond[i].remark)
+			bad = true
 		}
-	}*/
+	}
 
-	_ = da
+	if bad {
+		os.Exit(1)
+	}
+}
 
-	//TODO:
-	// - parse diff and align source
-	// - parse linter output and align
-
+func mapToRight(linterOut []linterError, da *diffAlignment) {
+	for i := range linterOut {
+		le := &linterOut[i]
+		fa := da.leftToRight[le.path]
+		if fa == nil {
+			continue
+		}
+		if debug {
+			fmt.Printf("%s -> %s\n", le.path, fa.toPath)
+		}
+		le.path = fa.toPath
+		for j := len(fa.lines) - 1; j >= 0; j-- {
+			if le.lineno >= fa.lines[j][0] {
+				delta := fa.lines[j][1] - fa.lines[j][0]
+				if debug {
+					fmt.Printf("\t%d -> %d\n", le.lineno, le.lineno+delta)
+				}
+				le.lineno += delta
+				break
+			}
+		}
+	}
 }

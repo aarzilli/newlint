@@ -26,6 +26,7 @@ func parseLinterOut(in string) []linterError {
 	for _, line := range lines {
 		m := reFileCol.FindStringSubmatch(line)
 		if len(m) != 4 {
+			r[len(r)-1].remark += "\n" + line
 			continue
 		}
 

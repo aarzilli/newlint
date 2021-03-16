@@ -2,16 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
-	"os/exec"
-	"strings"
 )
 
 const (
 	debug = true
 )
-
-var LinterCommand = []string{"staticcheck", "-checks", "all,-ST1003"}
 
 func must(err error) {
 	if err != nil {
@@ -19,60 +16,45 @@ func must(err error) {
 	}
 }
 
-func execIn(dir string, cmdstr string, args ...string) string {
-	if debug {
-		fmt.Printf("\t%s: %q %q\n", dir, cmdstr, args)
-	}
-	cmd := exec.Command(cmdstr, args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error %v executing %q %q: %s\n", err, cmdstr, args, string(out))
-		os.Exit(1)
-	}
-	return string(out)
-}
-
-func execInNoErr(dir string, cmdstr string, args ...string) string {
-	if debug {
-		fmt.Printf("\t%s: %q %q\n", dir, cmdstr, args)
-	}
-	cmd := exec.Command(cmdstr, args...)
-	cmd.Dir = dir
-	out, _ := cmd.CombinedOutput()
-	return string(out)
-}
-
-//TODO: change to taking three files:
-// 	- first output
-// 	- second output
-// 	- git diff
-//TODO: check that this works locally
+//TODO: check that a new failure would be detected
 //TODO: publish, CHANGE NAME!!!
 //TODO: make a change to test_mac.sh and check that it works remotely (git stash; check; git stash pop)
 
-func main() {
-	firstCommit := "master"
-	
-	linterOutSecond := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
-
-	da, err := parseDiff(execIn(".", "git", "diff", "--no-color", firstCommit, execIn(".", "git", "rev-parse", "HEAD")))
+func slurp(path string) string {
+	buf, err := ioutil.ReadFile(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "could not read %s: %s", path, err)
+		os.Exit(1)
+	}
+	return string(buf)
+}
+
+func main() {
+	if len(os.Args) != 4 {
+		fmt.Fprintf(os.Stderr, "wrong number of arguments\nusage: newlint <before> <after> <source-diff>\n")
+
+		os.Exit(1)
 	}
 
-	LinterCommand = append(LinterCommand, strings.TrimSpace(execIn(".", "go", "list", "-m"))+"/...")
+	beforePath := os.Args[1]
+	afterPath := os.Args[2]
+	sourceDiff := os.Args[3]
 
-	execIn(".", "git", "checkout", firstCommit)
-	linterOutFirst := parseLinterOut(execInNoErr(".", LinterCommand[0], LinterCommand[1:]...))
+	linterOutSecond := parseLinterOut(slurp(afterPath))
+
+	da, err := parseDiff(slurp(sourceDiff))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	linterOutFirst := parseLinterOut(slurp(beforePath))
 
 	if debug {
 		fmt.Printf("Merge base has %d linter lines in files touched by diff\n", len(linterOutFirst))
 	}
-	
+
 	mapToRight(linterOutFirst, da)
-	
-	execIn(".", "git", "checkout", "@{-1}")
 
 	linterOutFirstMap := make(map[pos]bool)
 	for i := range linterOutFirst {

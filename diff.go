@@ -114,7 +114,7 @@ func parseChunkHeader(s *lineScanner, line string) (leftLineno, leftSize, rightL
 		panic(s.error("malformed chunk header"))
 	}
 	leftLineno *= -1
-	rightSize, err = strconv.Atoi(strings.Split(ranges[0], ",")[1])
+	leftSize, err = strconv.Atoi(strings.Split(ranges[0], ",")[1])
 	if err != nil {
 		panic(s.error("malformed chunk header"))
 	}
@@ -128,6 +128,8 @@ func parseChunkHeader(s *lineScanner, line string) (leftLineno, leftSize, rightL
 		panic(s.error("malformed chunk header"))
 	}
 
-	contents = v[2][1:]
+	if len(v[2]) > 0 {
+		contents = v[2][1:]
+	}
 	return
 }

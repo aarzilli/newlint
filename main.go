@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	debug = true
+	debug = false
 )
 
 func must(err error) {
@@ -16,7 +16,6 @@ func must(err error) {
 	}
 }
 
-//TODO: check that a new failure would be detected
 //TODO: publish, CHANGE NAME!!!
 //TODO: make a change to test_mac.sh and check that it works remotely (git stash; check; git stash pop)
 
